@@ -1,6 +1,7 @@
 # all tasks are done in this blog post: https://towardsdatascience.com/how-to-build-an-encoder-decoder-translation-model-using-lstm-with-python-and-keras-a31e9d864b9b
 import pandas as pd
 import numpy as np
+import tensorflow as tf
 from keras.models import Model
 from keras.layers import Input, RepeatVector, GRU, Dense, TimeDistributed, Embedding
 from keras.preprocessing.text import Tokenizer
@@ -127,15 +128,15 @@ def one_hot_encdec(input_lang, output_lang):
     num_hidden_units = 48
 
     # encoder
-    encoder_inputs = Input(shape=(None, len(input_lang[1]))) # takes input of shape: length of sample.eng * eng_max_sentence_length
+    encoder_inputs = Input(shape=(250, input_lang.shape[1]), name="Input layer") # takes input of shape: length of sample.eng * eng_max_sentence_length
     encoder = GRU(num_hidden_units, return_state=True) # GRU model as layer which returns the state
     encoder_out, encoder_state = encoder(encoder_inputs) # Get the output and state from the GRU
 
     # decoder
-    decoder_inputs = RepeatVector(len(output_lang[1]))(encoder_state) # RepeatVector layer: for every word of the output language the context vector/state is assigned
+    decoder_inputs = RepeatVector(output_lang.shape[1])(encoder_state) # RepeatVector layer: for every word of the output language the context vector/state is assigned
     decoder = GRU(num_hidden_units, return_sequences=True) # GRU model as layer that returns all outputs
     decoder_outputs = decoder(decoder_inputs, initial_state=encoder_state) # Get the outputs of the decoder
-    decoder_dense_time = TimeDistributed(Dense(len(output_lang[1]), activation='softmax')) # Dense and TimeDistributed layers to get the final predictions (i.e. predicted dutch word probabilities) of the encoder-decoder model
+    decoder_dense_time = TimeDistributed(Dense(output_lang.shape[1], activation='softmax')) # Dense and TimeDistributed layers to get the final predictions (i.e. predicted dutch word probabilities) of the encoder-decoder model
     decoder_pred = decoder_dense_time(decoder_outputs) # Get the final prediction of the model
 
     # built model and compile it with with optimizer and loss function
@@ -143,12 +144,14 @@ def one_hot_encdec(input_lang, output_lang):
     model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['acc'])
     return model
 
+eng_train_set = np.array(eng_train_set)
+nl_train_set = np.array(nl_train_set)
 eng2dutch_one_hot_model = one_hot_encdec(eng_train_set, nl_train_set)
 
 # train and test model
 history = eng2dutch_one_hot_model.fit(
-    np.array(eng_train_set),
-    np.array(nl_train_set),
+    eng_train_set,
+    nl_train_set,
     batch_size=64,
     epochs=2,
     # We pass some validation for
@@ -160,20 +163,23 @@ results = eng2dutch_one_hot_model.evaluate(eng_test_set, nl_test_set, batch_size
 
 #old:
 n_epochs, bsize = 3, 250
+eng_train_set = np.array(eng_train_set)
+nl_train_set = np.array(nl_train_set)
 for ei in range(n_epochs):
   for i in range(0, train_size, bsize):
     # Get a single batch of inputs and outputs
     en_x = eng_train_set[i:i+bsize]   
     de_y = nl_train_set[i:i+bsize]
 
+    en_x = np.reshape(en_x, (None, en_x.shape[0], en_x.shape[1]))
+    #en_x = np.reshape(None, en_x.shape[1], en_x.shape[2])
+
     # Train the model on a single batch of data
-    model.train_on_batch(en_x, de_y)  
+    eng2dutch_one_hot_model.train_on_batch(en_x, de_y)  
 
   # Evaluate the trained model with test set
-  res = model.evaluate(eng_test_set, nl_test_set, verbose=0)
+  res = eng2dutch_one_hot_model.evaluate(eng_test_set, nl_test_set, verbose=0)
   print("{} => Loss:{}, Val Acc: {}".format(ei+1,res[0], res[1]*100.0))
-
-
 
 # RNN encoder-decoder model with Keras embedding (Works like this https://machinelearningmastery.com/use-word-embedding-layers-deep-learning-keras/)
 num_hidden_units = 48
