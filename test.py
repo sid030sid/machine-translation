@@ -1,7 +1,8 @@
 import string
 import pandas as pd
 import numpy as np
-import tensorflow as tf
+import matplotlib.pyplot as plt
+
 from keras.models import Model, Sequential
 from keras.layers import Input, RepeatVector, GRU, Dense, TimeDistributed, Embedding, LSTM, Activation
 from keras.preprocessing.text import Tokenizer
@@ -15,9 +16,9 @@ corpus["nl"] = nl
 
 # select random 10% of corpus for tasks 2-4
 ## note: due to limited resources, 5% of the short sentences (<= 50 words) are taken as a sample
-idx_short_sentences = [idx for idx, sentence in enumerate(corpus.nl) if len(sentence.split(" ")) <= 50] # the short sentence are determined by the dutch corpus as dutch tends to use more words than the english equivalent
+idx_short_sentences = [idx for idx, sentence in enumerate(corpus.nl) if len(sentence.split(" ")) <= 20] # the short sentence are determined by the dutch corpus as dutch tends to use more words than the english equivalent
 corpus_short = corpus.filter(items=idx_short_sentences, axis=0)
-sample = corpus_short.sample(round(len(corpus_short) * 0.05))
+sample = corpus_short.sample(round(len(corpus_short) * 0.03))
 
 eng_sentences = np.array(sample.eng)
 nl_sentences = np.array(sample.nl)
@@ -27,7 +28,6 @@ def clean_sentence(sentence):
     lower_case_sent = sentence.lower()
     # Strip punctuation
     clean_sentence = lower_case_sent.translate(str.maketrans('', '', string.punctuation))
-   
     return clean_sentence
 
 def tokenize(sentences):
@@ -64,16 +64,18 @@ max_eng_len = int(len(max(eng_text_tokenized,key=len)))
 nl_pad_sentence = pad_sequences(nl_text_tokenized, max_nl_len, padding = "post")
 eng_pad_sentence = pad_sequences(eng_text_tokenized, max_eng_len, padding = "post")
 
+nl_pad_sentence = nl_pad_sentence.reshape(*nl_pad_sentence.shape, 1)
+
 # model
 def encdec_model(input_shape, output_sequence_length, english_vocab_size, french_vocab_size):
 
     model = Sequential()
-    model.add(GRU(128, input_shape = input_shape[1:], return_sequences = False))
+    model.add(GRU(64, input_shape = input_shape[1:], return_sequences = False))
     model.add(RepeatVector(output_sequence_length))
-    model.add(GRU(128, return_sequences = True))
+    model.add(GRU(64, return_sequences = True))
     model.add(TimeDistributed(Dense(french_vocab_size, activation = 'softmax')))
     
-    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+    model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
     return model
 
 tmp_x = eng_pad_sentence.reshape((-1, eng_pad_sentence.shape[1], 1))
@@ -83,9 +85,20 @@ encodeco_model = encdec_model(
     nl_pad_sentence.shape[1],
     eng_vocab,
     nl_vocab)
+max_nl_len
 
 encodeco_model.summary()
-encodeco_model.fit(tmp_x, nl_pad_sentence, batch_size=1024, epochs=20, validation_split=0.2)
+
+history = encodeco_model.fit(tmp_x, nl_pad_sentence, batch_size=32, epochs=3, validation_split=0.2)
+print(history.history['accuracy'])
+# visualisation
+plt.plot(history.history['accuracy'])
+plt.plot(history.history['val_accuracy'])
+plt.title('model accuracy')
+plt.ylabel('accuracy')
+plt.xlabel('epoch')
+plt.legend(['train', 'test'], loc='upper left')
+plt.show()
 
 def approach1():
     # Reshape data to fit input layer of model
