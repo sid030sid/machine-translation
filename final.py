@@ -2,7 +2,6 @@ import string
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-
 from keras.models import Model, Sequential
 from keras.layers import Input, RepeatVector, GRU, Dense, TimeDistributed, Embedding, LSTM, Activation
 from keras.preprocessing.text import Tokenizer
@@ -133,23 +132,29 @@ nl2eng_keras_embd_encdec_char_model = keras_embd_encdec_model(nl_pad_sentence_ch
 
 
 
-# function for building ecoder-decoder model with Glove embedding model
-def get_glove_vectors(filename="glove.6B.300d.txt"):# Get all word vectors from pre-trained model    
-    glove_vector_dict = {}
-    with open(filename) as f:for line in f:            
-        values = line.split()            
+
+
+# get all of glove's pre-trained weights
+glove_word_vectors = {}
+with open("data\glove.6B.300d.txt", encoding="utf8") as glove_data:
+    for element in glove_data:
+        values = element.split()            
         word = values[0]            
         coefs = values[1:]            
-        glove_vector_dict[word] = np.asarray(coefs, dtype='float32')
-    return embeddings_index
+        glove_word_vectors[word] = np.asarray(coefs, dtype='float32')
 
-def keras_embd_encdec_model(input_shape, output_max_len, output_vocab_size):
-    # pre-trained glvoe vectors
-    pre_trained_vectors 
+# select glove vectors whose words are also present in the english corpus and store it in a matrix
+glove_embedding_matrix = np.zeros((eng_vocab, 300)) # 300 = word vector dimension = number of weights per word in glove --> see: len(glove_word_vectors["the"])
+for word, i in eng_text_tokenizer_word.word_index.items():        
+    embedding_vector = glove_word_vectors.get(word)
+    if embedding_vector is not None: # non exisiting words will be zero            
+        glove_embedding_matrix[i] = embedding_vector
 
+# function for building ecoder-decoder model with Keras' embedding model
+def glove_embd_encdec_model(input_shape, output_max_len, output_vocab_size):
     #build model
     model = Sequential()
-    model.add(Embedding(output_vocab_size, 64, input_length=input_shape[1], embeddings_initializer=Constant(pre_trained_vectors))))
+    model.add(Embedding(glove_embedding_matrix.shape[0], 300, input_length=input_shape[1], embeddings_initializer=Constant(glove_embedding_matrix)))
     model.add(GRU(64, return_sequences = False))
     model.add(RepeatVector(output_max_len))
     model.add(GRU(64, return_sequences = True))
@@ -157,6 +162,10 @@ def keras_embd_encdec_model(input_shape, output_max_len, output_vocab_size):
     model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
     return model
 
+# build models capable of using glove
+eng2nl_glove_embd_encdec_word_model = glove_embd_encdec_model(eng_pad_sentence_word.shape, max_nl_len_word, nl_vocab)
+
+#other pretrained weights: https://code.google.com/archive/p/word2vec/
 
 model_training_manuals = [
     {   
@@ -183,9 +192,12 @@ model_training_manuals = [
         "X" : nl_pad_sentence_char,
         "y" : eng_pad_sentence_char
     },
-]
-
-keras_embd_model_training_manuals = [
+    {   
+        "title" : "English to Dutch translator (word-based, Glove embedding)",
+        "model" : eng2nl_glove_embd_encdec_word_model,
+        "X" : eng_pad_sentence_word,
+        "y" : nl_pad_sentence_word
+    },
     {   
         "title" : "English to Dutch translator (word-based, Keras' embedding)",
         "model" : eng2nl_keras_embd_encdec_word_model,
@@ -212,7 +224,8 @@ keras_embd_model_training_manuals = [
     },
 ]
 
-for manual in keras_embd_model_training_manuals:
+
+for manual in model_training_manuals:
     print("\t\t\t")
     print("MODEL: "+manual["title"])
     
