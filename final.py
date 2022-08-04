@@ -238,9 +238,9 @@ eng2nl_word2vec_embd_encdec_word_model = word2vec_embd_encdec_model(eng_pad_sent
 # TASK 4: neural machine translation with attention (based on guide: https://towardsdatascience.com/light-on-math-ml-attention-with-keras-dc8dbc1fad39)
 #https://github.com/thushv89/attention_keras
 
-https://pypi.org/project/keras-self-attention/
+#https://pypi.org/project/keras-self-attention/
 
-from attention_keras.src.layers.attention import AttentionLayer
+#from attention_keras.src.layers.attention import AttentionLayer
 
 # try to use kears' built in attention layer: https://www.google.com/search?q=how+to+use+keras%27+attention+layer&rlz=1C1CHBF_deDE912DE912&oq=how+to+use+keras%27+attention+layer&aqs=chrome..69i57j0i22i30j0i390l5.768642j0j9&sourceid=chrome&ie=UTF-8
 def attention_encdec_model():
@@ -328,7 +328,7 @@ for manual in model_training_manuals:
     manual["model"].summary()
 
     # train and test model
-    history = manual["model"].fit(manual["X"], manual["y"], batch_size=64, epochs=3, validation_split=0.2)
+    history = manual["model"].fit(manual["X"], manual["y"], batch_size=64, epochs=20, validation_split=0.2)
 
     # accuracy of validation of last epoch
     print("Last measured accuracy score: ", history.history["val_accuracy"][2])
