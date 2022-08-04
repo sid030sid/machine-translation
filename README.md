@@ -13,7 +13,7 @@ This project creates several models for translating English to Dutch and vis-a-v
 ## Get started
 1. create virtual environment by entering in terminal: py -3 -m venv .venv
 2. activate newly created environment by entering in terminal: .venv\scripts\activate
-3. download packages by entering in terminal with active virtual environment: python -m pip install pandas, numpy, keras, tensorflow dataframe_image, (not install: Tensorflow, tf-nightly)
+3. download packages by entering in terminal with active virtual environment: python -m pip install pandas, numpy, keras, tensorflow dataframe_image, gensim, git+https://github.com/thushv89/attention_keras.git
 4. run phyton file by doing right click on respective file and selecting "Run Phyton file in terminal" or alternatively by entering in terminal witch active virtual environment: python file_name.p
 
 
