@@ -7,6 +7,7 @@ from keras.layers import RepeatVector, GRU, Dense, TimeDistributed, Embedding #A
 from keras.preprocessing.text import Tokenizer
 from keras_preprocessing.sequence import pad_sequences
 from keras.initializers import Constant # for matrix with pre-trained embedding weights
+from keras_self_attention import SeqSelfAttention as Attention
 from gensim.models import KeyedVectors # to load in pretrained word2vec weights
 import dataframe_image as dfi
 
@@ -43,7 +44,14 @@ dfi.export(summary_corpus, "documentation/tables_as_image/summary_corpus.png")
 #idx_short_sentences = list(set(nl_idx_short_sentences) & set(eng_idx_short_sentences))
 #corpus_short = corpus.filter(items=idx_short_sentences, axis=0)
 #sample = corpus_short.sample(round(len(corpus_short) * 0.05))
-sample = corpus.sample(round(len(corpus) * 0.01))
+def get_suitable_sample(): # due to limited resources this function is crucial for not having an outlier like a sentence with an unusally high amount of words which makes lower code not work due to not enough CPU
+    sample = corpus.sample(round(len(corpus) * 0.01))
+    eng_max_num_word_per_sentence = max([len(sentence.split()) for sentence in sample.eng])
+    nl_max_num_word_per_sentence = max([len(sentence.split()) for sentence in sample.nl])
+    if eng_max_num_word_per_sentence > 500 or nl_max_num_word_per_sentence > 500:
+        sample = get_suitable_sample()
+    return sample
+sample = get_suitable_sample()
 
 # transform english and dutch corpus into single numpy arrays for frther steps
 eng_sentences = np.array(sample.eng)
@@ -61,6 +69,7 @@ def clean_sentence(sentence):
 def tokenize(sentences, character_based = False):
     # Create tokenizer
     text_tokenizer = Tokenizer(char_level=character_based)
+
     # Fit texts
     text_tokenizer.fit_on_texts(sentences)
     return text_tokenizer.texts_to_sequences(sentences), text_tokenizer
@@ -243,7 +252,6 @@ nl2eng_word2vec_embd_encdec_word_model = embd_encdec_model(nl_pad_sentence_word.
 #from attention_keras.src.layers.attention import AttentionLayer
 
 # try to use kears' built in attention layer: https://www.google.com/search?q=how+to+use+keras%27+attention+layer&rlz=1C1CHBF_deDE912DE912&oq=how+to+use+keras%27+attention+layer&aqs=chrome..69i57j0i22i30j0i390l5.768642j0j9&sourceid=chrome&ie=UTF-8
-from keras_self_attention import Attention
 def attention_embd_encdec_model(input_shape, output_max_len, output_vocab_size, input_vocab_size, embedding_matrix):
     model = Sequential()
     model.add(Embedding(input_vocab_size, embedding_matrix.shape[1], input_length=input_shape[1], embeddings_initializer=Constant(embedding_matrix)))
@@ -271,6 +279,12 @@ nl2eng_attention_word2vec_embd_encdec_word_model = attention_embd_encdec_model(n
 
 model_training_manuals = [
     {   
+        "title" : "English to Dutch translator (word-based, Word2Vec embedding, with attention)",
+        "model" : eng2nl_attention_word2vec_embd_encdec_word_model,
+        "X" : eng_pad_sentence_word,
+        "y" : nl_pad_sentence_word
+    },
+    {   
         "title" : "English to Dutch translator (word-based)",
         "model" : eng2nl_encdec_word_model,
         "X" : eng_pad_sentence_word,
@@ -294,12 +308,7 @@ model_training_manuals = [
         "X" : nl_pad_sentence_word,
         "y" : eng_pad_sentence_word
     },
-    {   
-        "title" : "English to Dutch translator (word-based, Word2Vec embedding, with attention)",
-        "model" : eng2nl_attention_word2vec_embd_encdec_word_model,
-        "X" : eng_pad_sentence_word,
-        "y" : nl_pad_sentence_word
-    },
+    
     {   
         "title" : "English to Dutch translator (word-based, Glove embedding, with attention)",
         "model" : eng2nl_attention_glove_embd_encdec_word_model,
@@ -399,4 +408,4 @@ for manual in model_training_manuals:
 
 #function for converting tokenized data to text
 def toText(sentence, vocab):
-
+    return ""
