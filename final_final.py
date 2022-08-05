@@ -37,11 +37,13 @@ dfi.export(summary_corpus, "documentation/tables_as_image/summary_corpus.png")
 
 # select random data of corpus for tasks 2-4
 ## note: due to limited resources, 3% of the short sentences (<= 50 words) are taken as a sample
-nl_idx_short_sentences = [idx for idx, sentence in enumerate(corpus.nl) if len(sentence.split(" ")) <= 50] # the short sentence are determined by the dutch corpus as dutch tends to use more words than the english equivalent
-eng_idx_short_sentences = [idx for idx, sentence in enumerate(corpus.eng) if len(sentence.split(" ")) <= 50]
-idx_short_sentences = list(set(nl_idx_short_sentences) & set(eng_idx_short_sentences))
-corpus_short = corpus.filter(items=idx_short_sentences, axis=0)
-sample = corpus_short.sample(round(len(corpus_short) * 0.05))
+
+#nl_idx_short_sentences = [idx for idx, sentence in enumerate(corpus.nl) if len(sentence.split(" ")) <= 50] # the short sentence are determined by the dutch corpus as dutch tends to use more words than the english equivalent
+#eng_idx_short_sentences = [idx for idx, sentence in enumerate(corpus.eng) if len(sentence.split(" ")) <= 50]
+#idx_short_sentences = list(set(nl_idx_short_sentences) & set(eng_idx_short_sentences))
+#corpus_short = corpus.filter(items=idx_short_sentences, axis=0)
+#sample = corpus_short.sample(round(len(corpus_short) * 0.05))
+sample = corpus.sample(round(len(corpus) * 0.01))
 
 # transform english and dutch corpus into single numpy arrays for frther steps
 eng_sentences = np.array(sample.eng)
@@ -96,7 +98,7 @@ eng_pad_sentence_char = eng_pad_sentence_char.reshape(*eng_pad_sentence_char.sha
 # amount of unique words: crucial for building all upcoming models
 nl_vocab = len(nl_text_tokenizer_word.word_index) + 1
 eng_vocab = len(eng_text_tokenizer_word.word_index) + 1
-nl_char = len(eng_text_tokenizer_char.word_index) + 1
+nl_char = len(nl_text_tokenizer_char.word_index) + 1
 eng_char = len(eng_text_tokenizer_char.word_index) + 1
 
 # summary of sample for documentation purposes
@@ -106,7 +108,7 @@ eng_max_len = len(max(eng_text_tokenized_word,key=len))
 eng_min_len = len(min(eng_text_tokenized_word,key=len))
 
 nl_avg_len = np.mean([len(sentence) for sentence in nl_text_tokenized_word]) # average amount of words in a sentence of dutch corpus
-nl_num_word = len([len(sentence) for sentence in eng_text_tokenized_word]) # number of words in dutch corpus
+nl_num_word = sum([len(sentence) for sentence in nl_text_tokenized_word]) # number of words in dutch corpus
 nl_max_len = len(max(nl_text_tokenized_word,key=len))
 nl_min_len = len(min(nl_text_tokenized_word,key=len))
 
@@ -132,7 +134,7 @@ def encdec_model(input_shape, output_max_len, output_vocab_size):
     model.add(GRU(64, input_shape = input_shape[1:], return_sequences = False))
     model.add(RepeatVector(output_max_len))
     model.add(GRU(64, return_sequences = True))
-    model.add(TimeDistributed(Dense(output_vocab_size+1, activation = 'softmax'))) # +1 to include the last item of the output vocab
+    model.add(TimeDistributed(Dense(output_vocab_size, activation = 'softmax')))
     model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
     return model
 
@@ -150,7 +152,7 @@ nl2eng_encdec_char_model = encdec_model(nl_pad_sentence_char.shape, max_eng_len_
 # function for building ecoder-decoder model with Keras' embedding model
 def keras_embd_encdec_model(input_shape, output_max_len, output_vocab_size, input_vocab_size):
     model = Sequential()
-    model.add(Embedding(input_vocab_size, 32, input_length=input_shape[1], trainable = True))
+    model.add(Embedding(input_vocab_size, 300, input_length=input_shape[1], trainable = True)) #output dimension is set to 300 to be comparable with fixed output dim of glove and word2vec
     model.add(GRU(64, return_sequences = False))
     model.add(RepeatVector(output_max_len))
     model.add(GRU(64, return_sequences = True))
@@ -168,71 +170,69 @@ nl2eng_keras_embd_encdec_char_model = keras_embd_encdec_model(nl_pad_sentence_ch
 
 
 
-# glove embedding:
+# english embedding
 # get all of glove's pre-trained weights
-glove_word_vectors = {}
+eng_glove_word_vectors = {}
 with open("data\glove.6B.300d.txt", encoding="utf8") as glove_data:
     for element in glove_data:
         values = element.split()            
         word = values[0]            
         coefs = values[1:]            
-        glove_word_vectors[word] = np.asarray(coefs, dtype='float32')
+        eng_glove_word_vectors[word] = np.asarray(coefs, dtype='float32')
 
 # select glove vectors whose words are also present in the english corpus and store it in a matrix
-glove_embedding_matrix = np.zeros((eng_vocab, 300)) # 300 = word vector dimension = number of weights per word in glove --> see: len(glove_word_vectors["the"])
-words_not_in_glove = []
+eng_glove_embedding_matrix = np.zeros((eng_vocab, 300)) # 300 = word vector dimension = number of weights per word in glove --> see: len(glove_word_vectors["the"])
+eng_words_not_in_glove = []
 for word, i in eng_text_tokenizer_word.word_index.items():        
-    embedding_vector = glove_word_vectors.get(word)
+    embedding_vector = eng_glove_word_vectors.get(word)
     if embedding_vector is not None: # non exisiting words will be zero            
-        glove_embedding_matrix[i] = embedding_vector
+        eng_glove_embedding_matrix[i] = embedding_vector
     else : 
-        words_not_in_glove.append(word)
+        eng_words_not_in_glove.append(word)
 
-# function for building ecoder-decoder model with Glove embedding
-def glove_embd_encdec_model(input_shape, output_max_len, output_vocab_size, input_vocab_size):
-    #build model
-    model = Sequential()
-    model.add(Embedding(input_vocab_size, 300, input_length=input_shape[1], embeddings_initializer=Constant(glove_embedding_matrix)))
-    model.add(GRU(64, return_sequences = False))
-    model.add(RepeatVector(output_max_len))
-    model.add(GRU(64, return_sequences = True))
-    model.add(TimeDistributed(Dense(output_vocab_size+1, activation = 'softmax')))
-    model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
-    return model
-
-# build models (only those capable of using pretrained glove: english as input language and word-based)
-eng2nl_glove_embd_encdec_word_model = glove_embd_encdec_model(eng_pad_sentence_word.shape, max_nl_len_word, nl_vocab, eng_vocab)
-
-
-
-# word2vec embedding:
 # word2vec embedding based on pre-trained weights (source: https://code.google.com/archive/p/word2vec/):
-word2vec = KeyedVectors.load_word2vec_format("data\GoogleNews-vectors-negative300.bin", binary=True) # get all pretrained weigths
+eng_word2vec = KeyedVectors.load_word2vec_format("data\GoogleNews-vectors-negative300.bin", binary=True) # get all pretrained weigths
 
 # select word2vec vectors whose words are also present in the english corpus and store it in a matrix
-word2vec_embedding_matrix = np.zeros((eng_vocab, 300)) # 300 = word2vec vector dimension (= 300 weigths per word)
-words_not_in_word2vec = []
+eng_word2vec_embedding_matrix = np.zeros((eng_vocab, 300)) # 300 = word2vec vector dimension (= 300 weigths per word)
+eng_words_not_in_word2vec = []
 for word, i in eng_text_tokenizer_word.word_index.items():  
-    if word in word2vec : 
-        word2vec_embedding_matrix[i] = word2vec[word]
+    if word in eng_word2vec : 
+        eng_word2vec_embedding_matrix[i] = eng_word2vec[word]
     else : 
-        words_not_in_word2vec.append(word)
+        eng_words_not_in_word2vec.append(word)
 
-# function for building ecoder-decoder model with word2vec embedding
-def word2vec_embd_encdec_model(input_shape, output_max_len, output_vocab_size, input_vocab_size):
+
+
+# dutch embedding
+# word2vec embedding based on pre-trained weights (source: https://github.com/clips/dutchembeddings):
+nl_word2vec = KeyedVectors.load_word2vec_format("data\wikipedia-320.txt") # get all pretrained weigths
+
+# select word2vec vectors whose words are also present in the dutch corpus and store it in a matrix
+nl_word2vec_embedding_matrix = np.zeros((nl_vocab, 320)) # 320 = word2vec vector dimension (= 320 weigths per word)
+nl_words_not_in_word2vec = []
+for word, i in nl_text_tokenizer_word.word_index.items():  
+    if word in nl_word2vec : 
+        nl_word2vec_embedding_matrix[i] = nl_word2vec[word]
+    else : 
+        nl_words_not_in_word2vec.append(word)
+
+# function for building ecoder-decoder model with pretrained embedding weights
+def embd_encdec_model(input_shape, output_max_len, output_vocab_size, input_vocab_size, embedding_matrix):
     #build model
     model = Sequential()
-    model.add(Embedding(input_vocab_size, 300, input_length=input_shape[1], embeddings_initializer=Constant(word2vec_embedding_matrix))) # 300 due to word2vec vector dimension
+    model.add(Embedding(input_vocab_size, embedding_matrix.shape[1], input_length=input_shape[1], embeddings_initializer=Constant(embedding_matrix)))
     model.add(GRU(64, return_sequences = False))
     model.add(RepeatVector(output_max_len))
     model.add(GRU(64, return_sequences = True))
-    model.add(TimeDistributed(Dense(output_vocab_size+1, activation = 'softmax')))
+    model.add(TimeDistributed(Dense(output_vocab_size, activation = 'softmax')))
     model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
     return model
 
-# build models (only those capable of using pretrained word2vec: english as input language and word-based)
-eng2nl_word2vec_embd_encdec_word_model = word2vec_embd_encdec_model(eng_pad_sentence_word.shape, max_nl_len_word, nl_vocab, eng_vocab)
-
+# build eng2nl machine translators
+eng2nl_glove_embd_encdec_word_model = embd_encdec_model(eng_pad_sentence_word.shape, max_nl_len_word, nl_vocab, eng_vocab, eng_glove_embedding_matrix)
+eng2nl_word2vec_embd_encdec_word_model = embd_encdec_model(eng_pad_sentence_word.shape, max_nl_len_word, nl_vocab, eng_vocab, eng_word2vec_embedding_matrix)
+nl2eng_word2vec_embd_encdec_word_model = embd_encdec_model(nl_pad_sentence_word.shape, max_eng_len_word, eng_vocab, nl_vocab, nl_word2vec_embedding_matrix)
 
 
 # TASK 4: neural machine translation with attention (based on guide: https://towardsdatascience.com/light-on-math-ml-attention-with-keras-dc8dbc1fad39)
@@ -250,25 +250,41 @@ def attention_encdec_model():
 # build models with attention mechanism
 
 # the essential models for task 3
-# - eng2nl glove
+# - eng2nl glove --> 
 # - eng2nl word2vec -->
 # - nl2eng word2vec --> weights: https://github.com/clips/dutchembeddings
-# - nl2eng glove--> ??? currently missing
 # - eng2nl char based
 
 #essential models for task 4
-# - eng2nl glove with attention
 # - eng2nl word2vec with attention
 
 model_training_manuals = [
-
- 
     {   
         "title" : "English to Dutch translator (word-based)",
         "model" : eng2nl_encdec_word_model,
         "X" : eng_pad_sentence_word,
         "y" : nl_pad_sentence_word
     },
+    {   
+        "title" : "Dutch to English translator (word-based, Word2Vec embedding)",
+        "model" : nl2eng_word2vec_embd_encdec_word_model,
+        "X" : nl_pad_sentence_word,
+        "y" : eng_pad_sentence_word
+    },
+    {   
+        "title" : "English to Dutch translator (word-based, Word2Vec embedding)",
+        "model" : eng2nl_word2vec_embd_encdec_word_model,
+        "X" : eng_pad_sentence_word,
+        "y" : nl_pad_sentence_word
+    },
+    {
+        "title" : "English to Dutch translator (char-based)", 
+        "model" : eng2nl_encdec_char_model,
+        "X" : eng_pad_sentence_char,
+        "y" : nl_pad_sentence_char
+    },
+    
+    
 
     {
         "title" : "Dutch to English translator (word-based)",
@@ -277,12 +293,7 @@ model_training_manuals = [
         "y" : eng_pad_sentence_word
     },
 
-    {
-        "title" : "English to Dutch translator (char-based)", 
-        "model" : eng2nl_encdec_char_model,
-        "X" : eng_pad_sentence_char,
-        "y" : nl_pad_sentence_char
-    },
+    
 
     {
         "title" :"Dutch to English translator (char-based)", 
@@ -317,12 +328,6 @@ model_training_manuals = [
         "X" : nl_pad_sentence_char,
         "y" : eng_pad_sentence_char
     },
-        {   
-        "title" : "English to Dutch translator (word-based, Word2Vec embedding)",
-        "model" : eng2nl_word2vec_embd_encdec_word_model,
-        "X" : eng_pad_sentence_word,
-        "y" : nl_pad_sentence_word
-    },
        {   
         "title" : "English to Dutch translator (word-based, Glove embedding)",
         "model" : eng2nl_glove_embd_encdec_word_model,
@@ -340,7 +345,7 @@ for manual in model_training_manuals:
     manual["model"].summary()
 
     # train and test model
-    history = manual["model"].fit(manual["X"], manual["y"], batch_size=64, epochs=1, validation_split=0.2)
+    history = manual["model"].fit(manual["X"], manual["y"], batch_size=32, epochs=3, validation_split=0.2)
 
     # accuracy of validation of last epoch
     print("Last measured accuracy score: ", history.history["val_accuracy"][2])
