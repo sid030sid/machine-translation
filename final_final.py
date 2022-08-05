@@ -2,8 +2,8 @@ import string
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from keras.models import Model, Sequential
-from keras.layers import Input, RepeatVector, GRU, Dense, TimeDistributed, Embedding, LSTM, Activation
+from keras.models import Sequential
+from keras.layers import RepeatVector, GRU, Dense, TimeDistributed, Embedding #Attention
 from keras.preprocessing.text import Tokenizer
 from keras_preprocessing.sequence import pad_sequences
 from keras.initializers import Constant # for matrix with pre-trained embedding weights
@@ -243,11 +243,22 @@ nl2eng_word2vec_embd_encdec_word_model = embd_encdec_model(nl_pad_sentence_word.
 #from attention_keras.src.layers.attention import AttentionLayer
 
 # try to use kears' built in attention layer: https://www.google.com/search?q=how+to+use+keras%27+attention+layer&rlz=1C1CHBF_deDE912DE912&oq=how+to+use+keras%27+attention+layer&aqs=chrome..69i57j0i22i30j0i390l5.768642j0j9&sourceid=chrome&ie=UTF-8
-def attention_encdec_model():
+from keras_self_attention import Attention
+def attention_embd_encdec_model(input_shape, output_max_len, output_vocab_size, input_vocab_size, embedding_matrix):
     model = Sequential()
+    model.add(Embedding(input_vocab_size, embedding_matrix.shape[1], input_length=input_shape[1], embeddings_initializer=Constant(embedding_matrix)))
+    model.add(GRU(64, return_sequences = False))
+    model.add(RepeatVector(output_max_len))
+    model.add(Attention())
+    model.add(GRU(64, return_sequences = True))
+    model.add(TimeDistributed(Dense(output_vocab_size, activation = 'softmax')))
+    model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
     return model
 
 # build models with attention mechanism
+eng2nl_attention_glove_embd_encdec_word_model = attention_embd_encdec_model(eng_pad_sentence_word.shape, max_nl_len_word, nl_vocab, eng_vocab, eng_glove_embedding_matrix)
+eng2nl_attention_word2vec_embd_encdec_word_model = attention_embd_encdec_model(eng_pad_sentence_word.shape, max_nl_len_word, nl_vocab, eng_vocab, eng_word2vec_embedding_matrix)
+nl2eng_attention_word2vec_embd_encdec_word_model = attention_embd_encdec_model(nl_pad_sentence_word.shape, max_eng_len_word, eng_vocab, nl_vocab, nl_word2vec_embedding_matrix)
 
 # the essential models for task 3
 # - eng2nl glove --> 
@@ -277,6 +288,24 @@ model_training_manuals = [
         "X" : eng_pad_sentence_word,
         "y" : nl_pad_sentence_word
     },
+    {   
+        "title" : "Dutch to English translator (word-based, Word2Vec embedding, with attention",
+        "model" : nl2eng_attention_word2vec_embd_encdec_word_model,
+        "X" : nl_pad_sentence_word,
+        "y" : eng_pad_sentence_word
+    },
+    {   
+        "title" : "English to Dutch translator (word-based, Word2Vec embedding, with attention)",
+        "model" : eng2nl_attention_word2vec_embd_encdec_word_model,
+        "X" : eng_pad_sentence_word,
+        "y" : nl_pad_sentence_word
+    },
+    {   
+        "title" : "English to Dutch translator (word-based, Glove embedding, with attention)",
+        "model" : eng2nl_attention_glove_embd_encdec_word_model,
+        "X" : eng_pad_sentence_word,
+        "y" : nl_pad_sentence_word
+    }, 
     {
         "title" : "English to Dutch translator (char-based)", 
         "model" : eng2nl_encdec_char_model,
@@ -367,3 +396,7 @@ for manual in model_training_manuals:
     plt.xlabel('epoch')
     plt.legend(['train', 'test'], loc='upper left')
     plt.savefig("documentation/plots/loss/"+manual["title"]+".png", format="png")
+
+#function for converting tokenized data to text
+def toText(sentence, vocab):
+
