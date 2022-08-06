@@ -1,31 +1,59 @@
-import string
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from keras.models import Sequential
-from keras.layers import RepeatVector, GRU, Dense, TimeDistributed, Embedding #Attention
-from keras.preprocessing.text import Tokenizer
-from keras_preprocessing.sequence import pad_sequences
+import string # for string manipulation during pre-processing
+import pandas as pd # for data frames
+import numpy as np # for calculations
+import matplotlib.pyplot as plt # for plotting
+from keras.models import Sequential # for building encoder decoder model with RNNs
+from keras.layers import RepeatVector, GRU, Dense, TimeDistributed, Embedding # for building encoder decoder model with RNNs
+from keras.preprocessing.text import Tokenizer # for pre-processing
+from keras_preprocessing.sequence import pad_sequences # for pre-processing
 from keras.initializers import Constant # for matrix with pre-trained embedding weights
-from keras_self_attention import SeqSelfAttention as Attention
+from keras_self_attention import SeqSelfAttention as Attention # for attention mechanism
 from gensim.models import KeyedVectors # to load in pretrained word2vec weights
-import dataframe_image as dfi
+import seaborn as sns # for creating boxplots
+from collections import Counter # for further array functionality
+import dataframe_image as dfi # to store data frames as images
 
-# import corpuss
+
+
+# import corpus
 eng = pd.read_csv("data/europarl-v7.nl-en.en", sep="\t", names=["eng"])
 nl = pd.read_csv("data/europarl-v7.nl-en.nl", sep="\t", names=["nl"], on_bad_lines='skip') #bad lines are skiped due to pandas.errors.ParserError: Expected 1 fields in line 952982, saw 2
 corpus = pd.DataFrame(eng)
 corpus["nl"] = nl
 
+
+
 # TASK 1: analysis of corpus
-# number of words
+# array of all words in corpus
 words_eng = [word for sentence in corpus.eng for word in sentence.split()]
 words_nl = [word for sentence in corpus.nl for word in sentence.split()]
 
-# compare length of same sentence in english and in dutch
-num_word_per_sentence_eng = [len(sentence.split(" ")) for sentence in corpus.eng]
-num_word_per_sentence_nl = [len(sentence.split(" ")) for sentence in corpus.nl]
+# array of sentences' length
+num_word_per_sentence_eng = [len(sentence.split()) for sentence in corpus.eng]
+num_word_per_sentence_nl = [len(sentence.split()) for sentence in corpus.nl]
 
+# visualise sentence length
+data = pd.concat([
+    pd.DataFrame({"Number of words":num_word_per_sentence_nl, "Language":"Dutch"}),
+    pd.DataFrame({"Number of words":num_word_per_sentence_eng, "Language":"English"})
+])
+
+boxplot = sns.boxplot(y = "Number of words", x="Language", data=data).set_title('Length of English and Dutch sentences')
+fig = boxplot.figure.savefig("documentation/plots/summary_corpus/boxplot_number_words.png", format="png")
+plt.clf()
+
+# visualise top 10 most common used words
+plt.bar([item[0] for item in Counter(words_eng).most_common(10)], [item[1] for item in Counter(words_eng).most_common(10)])
+plt.title('Top 10 most used English words')  
+plt.savefig("documentation/plots/summary_corpus/top10_eng_words.png", format="png")
+plt.clf()
+
+plt.bar([item[0] for item in Counter(words_nl).most_common(10)], [item[1] for item in Counter(words_nl).most_common(10)])
+plt.title('Top 10 most used English words')  
+plt.savefig("documentation/plots/summary_corpus/top10_nl_words.png", format="png")
+plt.clf()
+
+# store values for documentation
 summary_corpus = pd.DataFrame({
     "Language":["English", "Dutch"], 
     "Number of sentences" : [len(corpus.eng), len(corpus.nl)],
@@ -36,33 +64,38 @@ summary_corpus = pd.DataFrame({
 }) 
 dfi.export(summary_corpus, "documentation/tables_as_image/summary_corpus.png")
 
-# select random data of corpus for tasks 2-4
-## note: due to limited resources, 3% of the short sentences (<= 50 words) are taken as a sample
 
-#nl_idx_short_sentences = [idx for idx, sentence in enumerate(corpus.nl) if len(sentence.split(" ")) <= 50] # the short sentence are determined by the dutch corpus as dutch tends to use more words than the english equivalent
-#eng_idx_short_sentences = [idx for idx, sentence in enumerate(corpus.eng) if len(sentence.split(" ")) <= 50]
-#idx_short_sentences = list(set(nl_idx_short_sentences) & set(eng_idx_short_sentences))
-#corpus_short = corpus.filter(items=idx_short_sentences, axis=0)
-#sample = corpus_short.sample(round(len(corpus_short) * 0.05))
-def get_suitable_sample(): # due to limited resources this function is crucial for not having an outlier like a sentence with an unusally high amount of words which makes lower code not work due to not enough CPU
-    sample = corpus.sample(round(len(corpus) * 0.01))
+
+
+# select random data of corpus for tasks 2-4
+def get_suitable_sample(): 
+
+    # due to limited resources select random 1% of corpus
+    sample = corpus.sample(round(len(corpus) * 0.01)) 
+    
+    # due to limited CPU no outlier sentences in terms of number of words can be present in sample (otherwise too big input matrices for models)
     eng_max_num_word_per_sentence = max([len(sentence.split()) for sentence in sample.eng])
     nl_max_num_word_per_sentence = max([len(sentence.split()) for sentence in sample.nl])
-    if eng_max_num_word_per_sentence > 500 or nl_max_num_word_per_sentence > 500:
-        sample = get_suitable_sample()
-    return sample
-sample = get_suitable_sample()
 
-# transform english and dutch corpus into single numpy arrays for frther steps
+    if eng_max_num_word_per_sentence > 500 or nl_max_num_word_per_sentence > 500:
+        sample = get_suitable_sample() # if outliers are present re-call function till suitable sample found
+    return sample
+
+# due to limited resources use conditional random sampling
+sample = get_suitable_sample() 
+
+# transform english and dutch corpus into single numpy arrays for further steps
 eng_sentences = np.array(sample.eng)
 nl_sentences = np.array(sample.nl)
 
+
+
 # TASK 2: pre-pprocessing
 def clean_sentence(sentence):
-    # Lower case the sentence
+    # lower case sentences
     lower_case_sent = sentence.lower()
 
-    # Strip punctuation
+    # remove punctuation
     clean_sentence = lower_case_sent.translate(str.maketrans('', '', string.punctuation))
     return clean_sentence
 
@@ -113,13 +146,13 @@ eng_char = len(eng_text_tokenizer_char.word_index) + 1
 # summary of sample for documentation purposes
 eng_avg_len = np.mean([len(sentence) for sentence in eng_text_tokenized_word]) # average amount of words in a sentence of englisch corpus
 eng_num_word = sum([len(sentence) for sentence in eng_text_tokenized_word]) # number of words in english corpus
-eng_max_len = len(max(eng_text_tokenized_word,key=len))
-eng_min_len = len(min(eng_text_tokenized_word,key=len))
+eng_max_len = len(max(eng_text_tokenized_word,key=len)) # maximum sentence lenght in english corpus
+eng_min_len = len(min(eng_text_tokenized_word,key=len)) # minimum sentence lenght in english corpus
 
 nl_avg_len = np.mean([len(sentence) for sentence in nl_text_tokenized_word]) # average amount of words in a sentence of dutch corpus
 nl_num_word = sum([len(sentence) for sentence in nl_text_tokenized_word]) # number of words in dutch corpus
-nl_max_len = len(max(nl_text_tokenized_word,key=len))
-nl_min_len = len(min(nl_text_tokenized_word,key=len))
+nl_max_len = len(max(nl_text_tokenized_word,key=len)) # maximum sentence lenght in dutch corpus
+nl_min_len = len(min(nl_text_tokenized_word,key=len)) # minimum sentence lenght in dutch corpus
 
 summary_sample = pd.DataFrame({
     "Language":["English", "Dutch"], 
@@ -135,7 +168,9 @@ dfi.export(summary_sample, "documentation/tables_as_image/summary_sample.png")
 
 
 
-# TASK 3: comparison of performance of neural machine translator depending word embedding and tokenization (word or character)
+# TASK 3: 
+# comparison of performance of neural machine translator depending word embedding (no embedding, Keras' embedding, GloVe, Word2Vec) and tokenization level (word or character)
+
 # no embedding:
 # function for building ecoder-decoder model without embedding (only one-hot representation)
 def encdec_model(input_shape, output_max_len, output_vocab_size):
@@ -157,11 +192,11 @@ nl2eng_encdec_char_model = encdec_model(nl_pad_sentence_char.shape, max_eng_len_
 
 
 
-# keras' native embedding model:
+# Keras' embedding model:
 # function for building ecoder-decoder model with Keras' embedding model
 def keras_embd_encdec_model(input_shape, output_max_len, output_vocab_size, input_vocab_size):
     model = Sequential()
-    model.add(Embedding(input_vocab_size, 300, input_length=input_shape[1], trainable = True)) #output dimension is set to 300 to be comparable with fixed output dim of glove and word2vec
+    model.add(Embedding(input_vocab_size, 300, input_length=input_shape[1], trainable = True)) #output dimension is set to 300 in order to be comparable with fixed output dim of glove and word2vec embedding
     model.add(GRU(64, return_sequences = False))
     model.add(RepeatVector(output_max_len))
     model.add(GRU(64, return_sequences = True))
@@ -179,8 +214,8 @@ nl2eng_keras_embd_encdec_char_model = keras_embd_encdec_model(nl_pad_sentence_ch
 
 
 
-# english embedding
-# get all of glove's pre-trained weights
+# glove embedding:
+# get all of glove's pre-trained weights for english words (source: https://nlp.stanford.edu/projects/glove/)
 eng_glove_word_vectors = {}
 with open("data\glove.6B.300d.txt", encoding="utf8") as glove_data:
     for element in glove_data:
@@ -190,7 +225,7 @@ with open("data\glove.6B.300d.txt", encoding="utf8") as glove_data:
         eng_glove_word_vectors[word] = np.asarray(coefs, dtype='float32')
 
 # select glove vectors whose words are also present in the english corpus and store it in a matrix
-eng_glove_embedding_matrix = np.zeros((eng_vocab, 300)) # 300 = word vector dimension = number of weights per word in glove --> see: len(glove_word_vectors["the"])
+eng_glove_embedding_matrix = np.zeros((eng_vocab, 300)) # 300 = word vector dimension = number of weights per word in glove
 eng_words_not_in_glove = []
 for word, i in eng_text_tokenizer_word.word_index.items():        
     embedding_vector = eng_glove_word_vectors.get(word)
@@ -199,8 +234,11 @@ for word, i in eng_text_tokenizer_word.word_index.items():
     else : 
         eng_words_not_in_glove.append(word)
 
-# word2vec embedding based on pre-trained weights (source: https://code.google.com/archive/p/word2vec/):
-eng_word2vec = KeyedVectors.load_word2vec_format("data\GoogleNews-vectors-negative300.bin", binary=True) # get all pretrained weigths
+
+
+# word2vec embedding:
+# get all of word2vec's pre-trained weights for english words (source: https://code.google.com/archive/p/word2vec/)
+eng_word2vec = KeyedVectors.load_word2vec_format("data\GoogleNews-vectors-negative300.bin", binary=True)
 
 # select word2vec vectors whose words are also present in the english corpus and store it in a matrix
 eng_word2vec_embedding_matrix = np.zeros((eng_vocab, 300)) # 300 = word2vec vector dimension (= 300 weigths per word)
@@ -211,10 +249,7 @@ for word, i in eng_text_tokenizer_word.word_index.items():
     else : 
         eng_words_not_in_word2vec.append(word)
 
-
-
-# dutch embedding
-# word2vec embedding based on pre-trained weights (source: https://github.com/clips/dutchembeddings):
+# get all of word2vec's pre-trained weights for dutch words (source: https://github.com/clips/dutchembeddings):
 nl_word2vec = KeyedVectors.load_word2vec_format("data\wikipedia-320.txt") # get all pretrained weigths
 
 # select word2vec vectors whose words are also present in the dutch corpus and store it in a matrix
@@ -226,7 +261,7 @@ for word, i in nl_text_tokenizer_word.word_index.items():
     else : 
         nl_words_not_in_word2vec.append(word)
 
-# function for building ecoder-decoder model with pretrained embedding weights
+# function for building encoder-decoder model with pretrained embedding weights
 def embd_encdec_model(input_shape, output_max_len, output_vocab_size, input_vocab_size, embedding_matrix):
     #build model
     model = Sequential()
@@ -238,20 +273,14 @@ def embd_encdec_model(input_shape, output_max_len, output_vocab_size, input_voca
     model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
     return model
 
-# build eng2nl machine translators
+# build eng2nl and nl2eng machine translator based on words and using pre-trained glove and word2vec weights
 eng2nl_glove_embd_encdec_word_model = embd_encdec_model(eng_pad_sentence_word.shape, max_nl_len_word, nl_vocab, eng_vocab, eng_glove_embedding_matrix)
 eng2nl_word2vec_embd_encdec_word_model = embd_encdec_model(eng_pad_sentence_word.shape, max_nl_len_word, nl_vocab, eng_vocab, eng_word2vec_embedding_matrix)
 nl2eng_word2vec_embd_encdec_word_model = embd_encdec_model(nl_pad_sentence_word.shape, max_eng_len_word, eng_vocab, nl_vocab, nl_word2vec_embedding_matrix)
 
 
-# TASK 4: neural machine translation with attention (based on guide: https://towardsdatascience.com/light-on-math-ml-attention-with-keras-dc8dbc1fad39)
-#https://github.com/thushv89/attention_keras
-
-#https://pypi.org/project/keras-self-attention/
-
-#from attention_keras.src.layers.attention import AttentionLayer
-
-# try to use kears' built in attention layer: https://www.google.com/search?q=how+to+use+keras%27+attention+layer&rlz=1C1CHBF_deDE912DE912&oq=how+to+use+keras%27+attention+layer&aqs=chrome..69i57j0i22i30j0i390l5.768642j0j9&sourceid=chrome&ie=UTF-8
+# TASK 4: neural machine translation with attention
+# function for building encoder-decoder model with pretrained embedding weights and attention mechanism (source:https://pypi.org/project/keras-self-attention/0.0.10/)
 def attention_embd_encdec_model(input_shape, output_max_len, output_vocab_size, input_vocab_size, embedding_matrix):
     model = Sequential()
     model.add(Embedding(input_vocab_size, embedding_matrix.shape[1], input_length=input_shape[1], embeddings_initializer=Constant(embedding_matrix)))
@@ -263,7 +292,7 @@ def attention_embd_encdec_model(input_shape, output_max_len, output_vocab_size, 
     model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
     return model
 
-# build models with attention mechanism
+# build models based on words with attention mechanism and pre-trained glove and word2vec weights
 eng2nl_attention_glove_embd_encdec_word_model = attention_embd_encdec_model(eng_pad_sentence_word.shape, max_nl_len_word, nl_vocab, eng_vocab, eng_glove_embedding_matrix)
 eng2nl_attention_word2vec_embd_encdec_word_model = attention_embd_encdec_model(eng_pad_sentence_word.shape, max_nl_len_word, nl_vocab, eng_vocab, eng_word2vec_embedding_matrix)
 nl2eng_attention_word2vec_embd_encdec_word_model = attention_embd_encdec_model(nl_pad_sentence_word.shape, max_eng_len_word, eng_vocab, nl_vocab, nl_word2vec_embedding_matrix)
@@ -279,74 +308,67 @@ nl2eng_attention_word2vec_embd_encdec_word_model = attention_embd_encdec_model(n
 
 model_training_manuals = [
     {   
+        "title" : "Dutch to English translator (word-based, Word2Vec embedding)",
+        "model" : nl2eng_word2vec_embd_encdec_word_model,
+        "X" : nl_pad_sentence_word,
+        "y" : eng_pad_sentence_word
+    },
+     
+       {   
+        "title" : "Dutch to English translator (word-based, Word2Vec embedding, with attention",
+        "model" : nl2eng_attention_word2vec_embd_encdec_word_model,
+        "X" : nl_pad_sentence_word,
+        "y" : eng_pad_sentence_word
+    },
+    {   
         "title" : "English to Dutch translator (word-based, Word2Vec embedding, with attention)",
         "model" : eng2nl_attention_word2vec_embd_encdec_word_model,
         "X" : eng_pad_sentence_word,
         "y" : nl_pad_sentence_word
     },
     {   
+        "title" : "English to Dutch translator (word-based, Glove embedding, with attention)",
+        "model" : eng2nl_attention_glove_embd_encdec_word_model,
+        "X" : eng_pad_sentence_word,
+        "y" : nl_pad_sentence_word
+    }, 
+    {   
         "title" : "English to Dutch translator (word-based)",
         "model" : eng2nl_encdec_word_model,
         "X" : eng_pad_sentence_word,
         "y" : nl_pad_sentence_word
     },
-    {   
-        "title" : "Dutch to English translator (word-based, Word2Vec embedding)",
-        "model" : nl2eng_word2vec_embd_encdec_word_model,
-        "X" : nl_pad_sentence_word,
-        "y" : eng_pad_sentence_word
-    },
+    
     {   
         "title" : "English to Dutch translator (word-based, Word2Vec embedding)",
         "model" : eng2nl_word2vec_embd_encdec_word_model,
         "X" : eng_pad_sentence_word,
         "y" : nl_pad_sentence_word
     },
-    {   
-        "title" : "Dutch to English translator (word-based, Word2Vec embedding, with attention",
-        "model" : nl2eng_attention_word2vec_embd_encdec_word_model,
-        "X" : nl_pad_sentence_word,
-        "y" : eng_pad_sentence_word
-    },
-    
-    {   
-        "title" : "English to Dutch translator (word-based, Glove embedding, with attention)",
-        "model" : eng2nl_attention_glove_embd_encdec_word_model,
-        "X" : eng_pad_sentence_word,
-        "y" : nl_pad_sentence_word
-    }, 
     {
         "title" : "English to Dutch translator (char-based)", 
         "model" : eng2nl_encdec_char_model,
         "X" : eng_pad_sentence_char,
         "y" : nl_pad_sentence_char
     },
-    
-    
-
     {
         "title" : "Dutch to English translator (word-based)",
         "model" : nl2eng_encdec_word_model,
         "X" : nl_pad_sentence_word,
         "y" : eng_pad_sentence_word
     },
-
-    
-
     {
         "title" :"Dutch to English translator (char-based)", 
         "model" : nl2eng_encdec_char_model,
         "X" : nl_pad_sentence_char,
         "y" : eng_pad_sentence_char
     }, 
-
     {
         "title" : "Dutch to English translator (word-based, Keras' embedding)",
         "model" : nl2eng_keras_embd_encdec_word_model,
         "X" : nl_pad_sentence_word,
         "y" : eng_pad_sentence_word
     },
-
     {   
         "title" : "English to Dutch translator (word-based, Keras' embedding)",
         "model" : eng2nl_keras_embd_encdec_word_model,
@@ -383,7 +405,7 @@ for manual in model_training_manuals:
     manual["model"].summary()
 
     # train and test model
-    history = manual["model"].fit(manual["X"], manual["y"], batch_size=32, epochs=3, validation_split=0.2)
+    history = manual["model"].fit(manual["X"], manual["y"], batch_size=16, epochs=3, validation_split=0.2)
 
     # accuracy of validation of last epoch
     print("Last measured accuracy score: ", history.history["val_accuracy"][2])
@@ -396,6 +418,7 @@ for manual in model_training_manuals:
     plt.xlabel('epoch')
     plt.legend(['train', 'test'], loc='upper left')
     plt.savefig("documentation/plots/accuracy/"+manual["title"]+".png", format="png")
+    plt.clf()
 
     # summarize history for loss
     plt.plot(history.history['loss'])
@@ -405,6 +428,7 @@ for manual in model_training_manuals:
     plt.xlabel('epoch')
     plt.legend(['train', 'test'], loc='upper left')
     plt.savefig("documentation/plots/loss/"+manual["title"]+".png", format="png")
+    plt.clf()
 
 #function for converting tokenized data to text
 def toText(sentence, vocab):
