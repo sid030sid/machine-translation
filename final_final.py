@@ -192,7 +192,7 @@ nl2eng_encdec_char_model = encdec_model(nl_pad_sentence_char.shape, max_eng_len_
 
 
 
-# Keras' embedding model:
+# own embedding model trough Keras:
 # function for building ecoder-decoder model with Keras' embedding model
 def keras_embd_encdec_model(input_shape, output_max_len, output_vocab_size, input_vocab_size):
     model = Sequential()
