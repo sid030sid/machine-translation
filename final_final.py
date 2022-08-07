@@ -305,9 +305,8 @@ nl2eng_attention_word2vec_embd_encdec_word_model = attention_embd_encdec_model(n
 
 #essential models for task 4
 # - eng2nl word2vec with attention
-
-model_training_manuals = [
-    {   
+done_models = {
+       {   
         "title" : "Dutch to English translator (word-based, Word2Vec embedding)",
         "model" : nl2eng_word2vec_embd_encdec_word_model,
         "X" : nl_pad_sentence_word,
@@ -351,6 +350,16 @@ model_training_manuals = [
         "X" : eng_pad_sentence_char,
         "y" : nl_pad_sentence_char
     },
+}
+
+model_training_manuals = [
+    {   
+        "title" : "English to Dutch translator (word-based, Glove embedding)",
+        "model" : eng2nl_glove_embd_encdec_word_model,
+        "X" : eng_pad_sentence_word,
+        "y" : nl_pad_sentence_word
+    }, 
+ 
     {
         "title" : "Dutch to English translator (word-based)",
         "model" : nl2eng_encdec_word_model,
@@ -388,12 +397,7 @@ model_training_manuals = [
         "X" : nl_pad_sentence_char,
         "y" : eng_pad_sentence_char
     },
-       {   
-        "title" : "English to Dutch translator (word-based, Glove embedding)",
-        "model" : eng2nl_glove_embd_encdec_word_model,
-        "X" : eng_pad_sentence_word,
-        "y" : nl_pad_sentence_word
-    }, 
+       
 ]
 
 
