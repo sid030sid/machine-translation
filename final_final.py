@@ -297,14 +297,7 @@ eng2nl_attention_glove_embd_encdec_word_model = attention_embd_encdec_model(eng_
 eng2nl_attention_word2vec_embd_encdec_word_model = attention_embd_encdec_model(eng_pad_sentence_word.shape, max_nl_len_word, nl_vocab, eng_vocab, eng_word2vec_embedding_matrix)
 nl2eng_attention_word2vec_embd_encdec_word_model = attention_embd_encdec_model(nl_pad_sentence_word.shape, max_eng_len_word, eng_vocab, nl_vocab, nl_word2vec_embedding_matrix)
 
-# the essential models for task 3
-# - eng2nl glove --> 
-# - eng2nl word2vec -->
-# - nl2eng word2vec --> weights: https://github.com/clips/dutchembeddings
-# - eng2nl char based
-
-#essential models for task 4
-# - eng2nl word2vec with attention
+# the essential models and their respective training and test data
 done_models = {
        {   
         "title" : "Dutch to English translator (word-based, Word2Vec embedding)",
@@ -400,7 +393,7 @@ model_training_manuals = [
        
 ]
 
-
+# training and testing models
 for manual in model_training_manuals:
     print("\t\t\t")
     print("MODEL: "+manual["title"])
@@ -434,6 +427,14 @@ for manual in model_training_manuals:
     plt.savefig("documentation/plots/loss/"+manual["title"]+".png", format="png")
     plt.clf()
 
-#function for converting tokenized data to text
+# measuring the performance of eng2nl transators using word embedding in terms of translating long or short sentences
+    # select the 10 longest sentences in english
+    # make all eng2nl translators try to translate 
+    # evaluate translation and compare accuracy score with previous ones as they are all made with short sentences
 def toText(sentence, vocab):
     return ""
+
+# measure the performacne of eng2nl translators using word embedding in terms of translating sentences with special characteristics
+    # select the 10 english sentences with the most punctuation
+    # select 10 english sentences with numbers inside
+    # select 10 english sentences with at least one word not being present in the sample (= eng_tokenizer.word_index)
