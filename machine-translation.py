@@ -63,8 +63,7 @@ summary_corpus = pd.DataFrame({
     "Maximum number of words per sentence" : [max(num_word_per_sentence_eng), max(num_word_per_sentence_nl)],
 }) 
 dfi.export(summary_corpus, "documentation/tables_as_image/summary_corpus.png")
-
-
+print("summary of corpus", summary_corpus)
 
 
 # select random data of corpus for tasks 2-4
@@ -165,7 +164,7 @@ summary_sample = pd.DataFrame({
     "Nmber of used characters (no duplicates)" : [eng_char, nl_char],
 })
 dfi.export(summary_sample, "documentation/tables_as_image/summary_sample.png")
-
+print("summary of sample", summary_sample)
 
 
 # TASK 3: 
@@ -279,6 +278,7 @@ eng2nl_word2vec_embd_encdec_word_model = embd_encdec_model(eng_pad_sentence_word
 nl2eng_word2vec_embd_encdec_word_model = embd_encdec_model(nl_pad_sentence_word.shape, max_eng_len_word, eng_vocab, nl_vocab, nl_word2vec_embedding_matrix)
 
 
+
 # TASK 4: neural machine translation with attention
 # function for building encoder-decoder model with pretrained embedding weights and attention mechanism (source:https://pypi.org/project/keras-self-attention/0.0.10/)
 def attention_embd_encdec_model(input_shape, output_max_len, output_vocab_size, input_vocab_size, embedding_matrix):
@@ -297,21 +297,17 @@ eng2nl_attention_glove_embd_encdec_word_model = attention_embd_encdec_model(eng_
 eng2nl_attention_word2vec_embd_encdec_word_model = attention_embd_encdec_model(eng_pad_sentence_word.shape, max_nl_len_word, nl_vocab, eng_vocab, eng_word2vec_embedding_matrix)
 nl2eng_attention_word2vec_embd_encdec_word_model = attention_embd_encdec_model(nl_pad_sentence_word.shape, max_eng_len_word, eng_vocab, nl_vocab, nl_word2vec_embedding_matrix)
 
-# the essential models and their respective training and test data
-done_models = {
-       {   
+
+
+# training and testing all upper models
+# models and their respective X and y data
+model_training_manuals = [
+     {   
         "title" : "Dutch to English translator (word-based, Word2Vec embedding)",
         "model" : nl2eng_word2vec_embd_encdec_word_model,
         "X" : nl_pad_sentence_word,
         "y" : eng_pad_sentence_word
-    },
-     
-       {   
-        "title" : "Dutch to English translator (word-based, Word2Vec embedding, with attention",
-        "model" : nl2eng_attention_word2vec_embd_encdec_word_model,
-        "X" : nl_pad_sentence_word,
-        "y" : eng_pad_sentence_word
-    },
+    },   
     {   
         "title" : "English to Dutch translator (word-based, Word2Vec embedding, with attention)",
         "model" : eng2nl_attention_word2vec_embd_encdec_word_model,
@@ -343,15 +339,30 @@ done_models = {
         "X" : eng_pad_sentence_char,
         "y" : nl_pad_sentence_char
     },
-}
-
-model_training_manuals = [
+        {   
+        "title" : "English to Dutch translator (word-based, Keras' embedding)",
+        "model" : eng2nl_keras_embd_encdec_word_model,
+        "X" : eng_pad_sentence_word,
+        "y" : nl_pad_sentence_word
+    },
     {   
         "title" : "English to Dutch translator (word-based, Glove embedding)",
         "model" : eng2nl_glove_embd_encdec_word_model,
         "X" : eng_pad_sentence_word,
         "y" : nl_pad_sentence_word
     }, 
+        {
+        "title" : "English to Dutch translator (char-based, Keras' embedding)", 
+        "model" : eng2nl_keras_embd_encdec_char_model,
+        "X" : eng_pad_sentence_char,
+        "y" : nl_pad_sentence_char
+    },
+        {
+        "title" : "Dutch to English translator (word-based, Keras' embedding)",
+        "model" : nl2eng_keras_embd_encdec_word_model,
+        "X" : nl_pad_sentence_word,
+        "y" : eng_pad_sentence_word
+    },
  
     {
         "title" : "Dutch to English translator (word-based)",
@@ -366,31 +377,17 @@ model_training_manuals = [
         "y" : eng_pad_sentence_char
     }, 
     {
-        "title" : "Dutch to English translator (word-based, Keras' embedding)",
-        "model" : nl2eng_keras_embd_encdec_word_model,
-        "X" : nl_pad_sentence_word,
-        "y" : eng_pad_sentence_word
-    },
-    {   
-        "title" : "English to Dutch translator (word-based, Keras' embedding)",
-        "model" : eng2nl_keras_embd_encdec_word_model,
-        "X" : eng_pad_sentence_word,
-        "y" : nl_pad_sentence_word
-    },
-    {
-        "title" : "English to Dutch translator (char-based, Keras' embedding)", 
-        "model" : eng2nl_keras_embd_encdec_char_model,
-        "X" : eng_pad_sentence_char,
-        "y" : nl_pad_sentence_char
-    },
-
-    {
         "title" :"Dutch to English translator (char-based, Keras' embedding)", 
         "model" : nl2eng_keras_embd_encdec_char_model,
         "X" : nl_pad_sentence_char,
         "y" : eng_pad_sentence_char
     },
-       
+    {   
+        "title" : "Dutch to English translator (word-based, Word2Vec embedding, with attention",
+        "model" : nl2eng_attention_word2vec_embd_encdec_word_model,
+        "X" : nl_pad_sentence_word,
+        "y" : eng_pad_sentence_word
+    }, 
 ]
 
 # training and testing models
@@ -401,8 +398,8 @@ for manual in model_training_manuals:
     # show model architecture
     manual["model"].summary()
 
-    # train and test model
-    history = manual["model"].fit(manual["X"], manual["y"], batch_size=16, epochs=3, validation_split=0.2)
+    # train and test model 
+    history = manual["model"].fit(manual["X"], manual["y"], batch_size=8, epochs=3, validation_split=0.2)
 
     # accuracy of validation of last epoch
     print("Last measured accuracy score: ", history.history["val_accuracy"][2])
@@ -426,15 +423,3 @@ for manual in model_training_manuals:
     plt.legend(['train', 'test'], loc='upper left')
     plt.savefig("documentation/plots/loss/"+manual["title"]+".png", format="png")
     plt.clf()
-
-# measuring the performance of eng2nl transators using word embedding in terms of translating long or short sentences
-    # select the 10 longest sentences in english
-    # make all eng2nl translators try to translate 
-    # evaluate translation and compare accuracy score with previous ones as they are all made with short sentences
-def toText(sentence, vocab):
-    return ""
-
-# measure the performacne of eng2nl translators using word embedding in terms of translating sentences with special characteristics
-    # select the 10 english sentences with the most punctuation
-    # select 10 english sentences with numbers inside
-    # select 10 english sentences with at least one word not being present in the sample (= eng_tokenizer.word_index)
